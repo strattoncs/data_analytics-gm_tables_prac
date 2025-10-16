@@ -2,6 +2,15 @@
 .Rhistory
 .Rapp.history
 
+#data
+*.csv
+
+#project
+*.Rproj
+
+#html
+data_analytics-gm_tables_prac.html
+
 # Session Data files
 .RData
 .RDataTmp
