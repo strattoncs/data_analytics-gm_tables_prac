@@ -1,0 +1,488 @@
+---
+title: "Data Analytics GM Tables Practice"
+author: "C.S. Stratton"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    toc_depth: 3
+  base_font:
+        google: "Arial"
+---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 16px;
+      text-align: justified;
+}
+
+
+h1 { /* Header 1 */
+  font-size: 42px;
+  color: darkblue;
+  text-decoration: underline;
+  }
+
+h2 { /* Header 2 */
+  font-size: 30px;
+  color: orangered;
+  }
+
+
+h3 { /* Header 2 */
+  font-size: 24px;
+  color: Black;
+  }
+  
+</style>
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(gtsummary)
+library(gt)
+library(flextable)
+library(lubridate)
+library(patchwork)
+library(broom)
+library(purrr)
+
+gila_point_data <- read.csv("data_gmocc-all-nv.csv")
+gila_transect_data <- read.csv("data_gmocc-transect-nv.csv") %>%
+  filter(ontran=="y")
+gila_offtransect_data <- read.csv("data_gmocc-transect-nv.csv")
+data_transect_cal <- gila_transect_data %>%
+  filter(site_id == "Calico Basin") 
+data_transect_vof <- gila_transect_data %>%
+  filter(site_id == "Valley of Fire") 
+
+
+gila_transect_data$tran_time <- hms(gila_transect_data$tran_time)
+gila_transect_data$tran_time_min <- (period_to_seconds(gila_transect_data$tran_time))/60
+
+labels_det <- c("Non-Det", "Det")
+
+theme_gtsummary_mean_sd(set_theme = TRUE)
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+First split I wanted to look at was between my two study sites
+
+```{r site split transect data}
+
+table_transect_logistics <- gila_transect_data %>%
+  select(
+    site_id,
+    detection,
+    total_length_m,
+    tran_time_min
+  ) %>%
+  tbl_summary(
+    by = site_id,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p}%)"),
+    label = list(
+      detection ~ "Detections",
+      tran_time_min ~ "Length of Time (min)",
+      total_length_m ~ "Distance (m)")) %>%
+  modify_caption("Table 1. Transect Logistics Data")
+
+table_transect_logistics
+
+```
+
+
+```{r transect info boxplots}
+boxplot_distance <- ggplot(gila_transect_data, aes(x = site_id, y = total_length_m)) +
+  geom_boxplot() +
+  geom_point() +
+  ylab ("Total Transect Length (m)") +
+  xlab ("Site")
+
+boxplot_time <- ggplot(gila_transect_data, aes(x = site_id, y = tran_time_min)) +
+  geom_boxplot() +
+  geom_point() +
+  ylab ("Transect Time (min)") +
+  xlab ("Site") +
+  scale_y_continuous(limits = c(75, 150), breaks = c(75, 90, 105, 120, 135, 150))
+  
+(boxplot_distance + boxplot_time)
+```
+
+
+
+```{r rock check, eval=FALSE, include=FALSE}
+data_rock_cal <- gila_transect_data %>%
+  filter(site_id == "Calico Basin") %>%
+  select(site_id, rock_ind_avg, rock_ind_median) %>%
+  pivot_longer(
+    cols = c(rock_ind_avg, rock_ind_median),
+        names_to = "source_column",
+        values_to = "calico_basin")
+
+data_rock_vof <- gila_transect_data %>%
+  filter(site_id == "Valley of Fire") %>%
+  select(site_id, rock_ind_avg, rock_ind_median) %>%
+  pivot_longer(
+    cols = c(rock_ind_avg, rock_ind_median),
+        names_to = "source_column",
+        values_to = "valley_of_fire")
+
+data_rock_merge <- merge(data_rock_cal, data_rock_vof, by = "site_id", all = TRUE)
+data_rock_merge$measurement <- coalesce(data_rock_merge$source_column.x, data_rock_merge$source_column.y)
+
+data_rock_merge <- as.data.frame(data_rock_merge)
+data_rock_merge$calico_basin <- as.numeric(data_rock_merge$calico_basin)
+data_rock_merge$valley_of_fire <- as.numeric(data_rock_merge$valley_of_fire)
+data_rock_merge$measurement <- as.factor(data_rock_merge$measurement)
+
+data_rock_merge <- data_rock_merge %>%
+  select(
+    measurement,
+    calico_basin,
+    valley_of_fire)
+
+tbl_summary(data=data_rock_merge,
+    by = measurement,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    label = list(
+      calico_basin ~ "Calico Basin",
+      valley_of_fire ~ "Valley of Fire"
+      ) %>%
+      add_p(pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>%
+  modify_caption("Table 2. Transect Medians vs. Transect Means for Granularity Index"))
+
+data_rock_cal$source_column <- as.factor(data_rock_cal$source_column)
+
+table_rock_cal <- data_rock_cal %>%
+  select(source_column, calico_basin) %>%
+  tbl_summary(
+    by = source_column,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})"),
+    label =
+      (calico_basin ~ "Calico Basin") %>%
+      add_p(pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>%
+  modify_caption("Table 2. Transect Medians vs. Transect Means for Granularity Index"))
+
+table_rock_compare
+```
+
+```{r rock t-test}
+ttest_rock_cal <- t.test(data_transect_cal$rock_ind_avg, data_transect_cal$rock_ind_median, paired = TRUE)
+ttest_rock_vof <- t.test(data_transect_vof$rock_ind_avg, data_transect_vof$rock_ind_median, paired = TRUE)
+
+ttest_rock_cal
+ttest_rock_vof
+```
+
+
+```{r transect environmental data}
+table_transect_env <- gila_transect_data %>%
+  select(
+    site_id,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+  tbl_summary(
+    by = site_id,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p}%)"),
+    label = list(
+      elev ~ "Elevation (m)",
+      air_temp ~ "Air Temperature (C)",
+      gr_temp ~ "Ground Temperature (C)",
+      avg_wind_spd ~ "Average Wind Speed (km/h)",
+      rock_ind_avg ~ "Granularity Index",
+      shr_dens ~ "Shrub Density (n/m^2)",
+      vap_pres_kPa ~ "Vapor Pressure (kPa)",
+      prey_pres ~ "Prey Presence (n)"
+      )) %>%
+  add_p(pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>%
+  modify_caption("Table 3. Transect Environmental Data")
+
+table_transect_env
+```
+
+
+```{r environmental plots}
+gathered_env_data <- gila_transect_data %>%
+  select(
+    site_id,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+    gather(-site_id, key="var", value = "value")
+
+ggplot(gathered_env_data, aes(x = site_id, y = value)) +
+    geom_boxplot() +
+    geom_point() +
+    facet_wrap(~var, scales = "free") +
+    theme_bw()
+```
+
+```{r detections data cal}
+
+table_detections_cal <- gila_transect_data %>%
+  filter(site_id == "Calico Basin") %>%
+  select(
+    detection,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+  tbl_summary(
+    by = detection,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p}%)"),
+    label = list(
+      elev ~ "Elevation (m)",
+      air_temp ~ "Air Temperature (C)",
+      gr_temp ~ "Ground Temperature (C)",
+      avg_wind_spd ~ "Average Wind Speed (km/h)",
+      rock_ind_avg ~ "Granularity Index",
+      shr_dens ~ "Shrub Density (n/m^2)",
+      vap_pres_kPa ~ "Vapor Pressure (kPa)",
+      prey_pres ~ "Prey Presence (n)"
+      )) %>%
+  add_p(test = all_continuous() ~ "t.test",
+        pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>%
+  modify_fmt_fun(statistic ~ style_sigfig) %>% 
+  modify_caption("Table 4. Transect Detections Data for Calico Basin") %>%
+  modify_header(
+    update = list(
+      label ~ '**Calico Basin**',
+      stat_1 ~ '**Non-detection**<br>N = {n}',
+      stat_2 ~ '**Detection**<br>N = {n}',
+      statistic ~ "**t-value**",
+      p.value ~ '**P-value**')) %>%
+  modify_footnote(everything() ~ NA)
+  
+
+table_detections_cal
+```
+
+```{r detections data cal offtran}
+
+table_detections_cal_offtran <- gila_offtransect_data %>%
+  filter(site_id == "Calico Basin") %>%
+  select(
+    detection,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+  tbl_summary(
+    by = detection,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p}%)"),
+    label = list(
+      elev ~ "Elevation (m)",
+      air_temp ~ "Air Temperature (C)",
+      gr_temp ~ "Ground Temperature (C)",
+      avg_wind_spd ~ "Average Wind Speed (km/h)",
+      rock_ind_avg ~ "Granularity Index",
+      shr_dens ~ "Shrub Density (n/m^2)",
+      vap_pres_kPa ~ "Vapor Pressure (kPa)",
+      prey_pres ~ "Prey Presence (n)"
+      )) %>%
+  add_p(test = all_continuous() ~ "t.test",
+        pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>%
+  modify_fmt_fun(statistic ~ style_sigfig) %>% 
+  modify_caption("Table 4. Transect Detections Data for Calico Basin with off-transect data") %>%
+  modify_header(
+    update = list(
+      label ~ '**Calico Basin**',
+      stat_1 ~ '**Non-detection**<br>N = {n}',
+      stat_2 ~ '**Detection**<br>N = {n}',
+      statistic ~ "**t-value**",
+      p.value ~ '**P-value**')) %>%
+  modify_footnote(everything() ~ NA)
+  
+
+table_detections_cal_offtran
+```
+
+```{r detections data vof}
+
+table_detections_vof <- gila_transect_data %>%
+  filter(site_id == "Valley of Fire") %>%
+  select(
+    detection,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+  tbl_summary(
+    by = detection,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p}%)"),
+    label = list(
+      elev ~ "Elevation (m)",
+      air_temp ~ "Air Temperature (C)",
+      gr_temp ~ "Ground Temperature (C)",
+      avg_wind_spd ~ "Average Wind Speed (km/h)",
+      rock_ind_avg ~ "Granularity Index",
+      shr_dens ~ "Shrub Density (n/m^2)",
+      vap_pres_kPa ~ "Vapor Pressure (kPa)",
+      prey_pres ~ "Prey Presence (n)"
+      )) %>%
+  add_p(test = all_continuous() ~ "t.test",
+        pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>%
+  modify_fmt_fun(statistic ~ style_sigfig) %>% 
+  modify_caption("Table 5. Transect Detections Data for Valley of Fire") %>%
+  modify_header(
+    update = list(
+      label ~ '**Valley of Valley**',
+      stat_1 ~ '**Non-detection**<br>N = {n}',
+      stat_2 ~ '**Detection**<br>N = {n}',
+      statistic ~ "**t-value**",
+      p.value ~ '**P-value**')) %>%
+  modify_footnote(everything() ~ NA)
+  
+
+table_detections_vof
+```
+
+```{r detections data vof offtran}
+
+table_detections_vof_offtran <- gila_offtransect_data %>%
+  filter(site_id == "Valley of Fire") %>%
+  select(
+    detection,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+  tbl_summary(
+    by = detection,
+    missing = "no",
+    digits = all_continuous() ~ 1,
+    statistic = list(all_continuous() ~ "{mean} ({sd})",
+                     all_categorical() ~ "{n} ({p}%)"),
+    label = list(
+      elev ~ "Elevation (m)",
+      air_temp ~ "Air Temperature (C)",
+      gr_temp ~ "Ground Temperature (C)",
+      avg_wind_spd ~ "Average Wind Speed (km/h)",
+      rock_ind_avg ~ "Granularity Index",
+      shr_dens ~ "Shrub Density (n/m^2)",
+      vap_pres_kPa ~ "Vapor Pressure (kPa)",
+      prey_pres ~ "Prey Presence (n)"
+      )) %>%
+  add_p(test = all_continuous() ~ "t.test",
+        pvalue_fun = ~ style_pvalue(.x, digits = 2)) %>%
+  modify_fmt_fun(statistic ~ style_sigfig) %>% 
+  modify_caption("Table 5. Transect Detections Data for Valley of Fire with off-transect data") %>%
+  modify_header(
+    update = list(
+      label ~ '**Valley of Valley**',
+      stat_1 ~ '**Non-detection**<br>N = {n}',
+      stat_2 ~ '**Detection**<br>N = {n}',
+      statistic ~ "**t-value**",
+      p.value ~ '**P-value**')) %>%
+  modify_footnote(everything() ~ NA)
+  
+
+table_detections_vof_offtran
+```
+
+
+```{r boxplots detections cal}
+data_transect_cal$detection <- as.factor(data_transect_cal$detection)
+gathered_det_cal <- data_transect_cal %>%
+  select(
+    detection,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+    gather(-detection, key="var", value = "value")
+
+
+ggplot(gathered_det_cal, aes(x = detection, y = value)) +
+    geom_boxplot() +
+    geom_point() +
+    facet_wrap(~var, scales = "free") +
+    theme_bw() +
+    scale_x_discrete(labels = labels_det)
+```
+
+
+```{r boxplots detections vof}
+data_transect_vof$detection <- as.factor(data_transect_vof$detection)
+gathered_det_vof <- data_transect_vof %>%
+  select(
+    detection,
+    elev,
+    air_temp,
+    gr_temp,
+    avg_wind_spd,
+    rock_ind_avg,
+    shr_dens,
+    vap_pres_kPa,
+    prey_pres
+  ) %>%
+    gather(-detection, key="var", value = "value")
+
+ggplot(gathered_det_vof, aes(x = detection, y = value)) +
+    geom_boxplot() +
+    geom_point() +
+    facet_wrap(~var, scales = "free") +
+    theme_bw() +
+    scale_x_discrete(labels = labels_det)
+```
+
