@@ -234,7 +234,7 @@ table_transect_env
 ```
 
 
-```{r environmental plots}
+```{r environmental plots, fig.width=10, fig.height=8}
 gathered_env_data <- gila_transect_data %>%
   select(
     site_id,
@@ -449,7 +449,7 @@ table_detections_vof_offtran
 ```
 
 
-```{r boxplots detections cal}
+```{r boxplots detections cal, fig.width=10, fig.height=8}
 data_transect_cal$detection <- as.factor(data_transect_cal$detection)
 gathered_det_cal <- data_transect_cal %>%
   select(
@@ -475,7 +475,7 @@ ggplot(gathered_det_cal, aes(x = detection, y = value)) +
 ```
 
 
-```{r boxplots detections vof}
+```{r boxplots detections vof, fig.width=10, fig.height=8}
 data_transect_vof$detection <- as.factor(data_transect_vof$detection)
 gathered_det_vof <- data_transect_vof %>%
   select(
