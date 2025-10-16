@@ -68,8 +68,21 @@ theme_gtsummary_mean_sd(set_theme = TRUE)
 
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
+<br>
 
-First split I wanted to look at was between my two study sites
+## Site 1: Calico Basin
+
+<br>
+<center>
+![](images/Calico.jpeg)  
+<br>
+
+## Site 2: Valley of Fire
+
+<br>
+
+![](images/VoF.jpeg)  
+</center>
 
 ```{r site split transect data}
 

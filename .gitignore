@@ -5,11 +5,13 @@
 #data
 *.csv
 
+/images/
+
 #project
 *.Rproj
 
 #html
-data_analytics-gm_tables_prac.html
+*data_analytics-gm_tables_prac.html
 
 # Session Data files
 .RData
